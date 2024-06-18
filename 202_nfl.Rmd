@@ -1,0 +1,204 @@
+---
+title: "2020 NFL"
+author: "      "
+date: "2024-06-12"
+output: 
+  word_document: 
+    fig_caption: yes
+---
+
+# EDA OF 2020 NFL PREDICTIONS
+
+In this project, we shall clean the 2020 nfl dataset and perform some simple Exploratory Data Analyis. At the end, we shall export the cleaned data to excel
+
+## Import libraries
+```{r}
+#We first import the required libaries
+library(ggplot2)
+library(tidyverse)
+library(skimr)
+library(broom)
+library(Hmisc)
+library(readxl)
+library(readr)
+library(dplyr)
+```
+
+## Import dataset and Convert to Desirabe datatypes
+
+```{r}
+#Importing the data
+#Importing sheet 1
+sheet1<-read_excel("C:\\Users\\KEVINS\\OneDrive\\Desktop\\TAB\\nfl_elo_latest.xlsx",sheet = "Sheet 1")
+#Importing sheet 2
+sheet2<-read_excel("C:\\Users\\KEVINS\\OneDrive\\Desktop\\TAB\\nfl_elo_latest.xlsx",sheet = "Sheet2")
+```
+
+```{r}
+#We skim through sheet1 and sheet2
+#Both the sheets have the same number of columns,30
+skim(sheet1)
+skim(sheet2)
+#Check the data types
+str(sheet1)
+str(sheet2)
+```
+
+```{r}
+#We check if the two sheets have identical column names before combining them
+identical(names(sheet1),names(sheet2))
+#Converting various variables to numeric
+sheet1$elo1_pre<-as.numeric(sheet1$elo1_pre)
+sheet2$elo1_pre<-as.numeric(sheet2$elo1_pre)
+sheet1$elo2_post<-as.numeric(sheet1$elo2_post)
+sheet2$elo2_post<-as.numeric(sheet2$elo2_post)
+sheet1$qb1_value_pre<-as.numeric(sheet1$qb1_value_pre)
+sheet2$qb1_value_pre<-as.numeric(sheet2$qb1_value_pre)
+sheet1$score1<-as.numeric(sheet1$score1)
+sheet2$score1<-as.numeric(sheet2$score1)
+sheet1$score2<-as.numeric(sheet1$score2)
+sheet2$score2<-as.numeric(sheet2$score2)
+sheet1$qb2_value_pre<-as.numeric(sheet1$qb2_value_pre)
+sheet2$qb2_value_pre<-as.numeric(sheet2$qb2_value_pre)
+sheet1$qb1_adj<-as.numeric(sheet1$qb1_adj)
+sheet2$qb1_adj<-as.numeric(sheet2$qb1_adj)
+#Now combine
+data_2020nfl<-bind_rows(sheet1,sheet2)
+view(data_2020nfl)
+```
+
+```{r}
+#Using our new data now, we now check the data types
+str(data_2020nfl)
+#Our data types are perfectly ok
+print(data_2020nfl)
+```
+
+## Data Cleaning
+
+### Remove columns that are not useful
+
+```{r}
+#Columns like date, season, neutral are not important. so we will drop them.
+#Also, the playoff column contain many NAs making it irrelevant. We shall also remove it.
+data_2020nfl<-data_2020nfl%>%select(-date,-season,-neutral,-playoff)
+str(data_2020nfl)
+```
+
+## Dealing with Nulls
+
+```{r}
+#To deal with Nulls, we shall calculate the columns means and replace the NAs with the mean
+#Calculating column means
+
+means_data<-data_2020nfl%>%select(-team1,-team2,-qb1,-qb2) #Selecting columns that have numeric variables
+str(means_data)
+char_data<- data_2020nfl%>%select(team1,team2,qb1,qb2)#Selecting character variables to be rejoined with the numerical variables after performing mean imputation
+means_col<-colMeans(means_data,na.rm = TRUE) #Obtaining the mean of all numeric variables
+print(means_col) #Printing the column means.
+```
+
+```{r}
+#Perform mean imputation
+Mean_impute<-function(x){
+  col_mean<-means_col
+  x[is.na(x)]<-col_mean
+  return(x)
+}
+#Apply the function to each column
+means_data[]<-lapply(means_data,Mean_impute)
+skim(means_data) #Checking if there are any missing values
+#Recombine our data
+#Our character variables have missing values. Instead of dropping them, we shall replace them with a value NONE.
+char_data[is.na(char_data)]<-"NONE"
+skim(char_data)
+nfl_2020<-bind_cols(char_data,means_data)
+
+```
+
+
+```{r}
+#Checking if nulls are dealt with
+skim(nfl_2020)#There are no more nulls
+
+```
+
+## Dealing with Outliers
+
+```{r}
+#We check for outliers in our numerical variables by creating boxplots
+means_data<-means_data%>%
+  pivot_longer(cols = everything(), names_to = "variable",values_to = "value")
+ggplot(means_data,aes(x=variable,y=value))+
+  geom_boxplot()+
+  ggtitle("Boxplot to identify outliers")
+```
+
+```{r}
+#From the boxplot, there are outliers.
+#We shall cap them using the function below
+outlier_cap<-function(x, lower_quantile=0.5, upper_quantile=0.95){
+  lower_bound<-quantile(x,lower_quantile)
+  upper_bound<-quantile(x,upper_quantile)
+  x[x<lower_bound]<-lower_bound
+  x[x>upper_bound]<-upper_bound
+  return(x)
+}
+#Apply the fucnction
+nfl_2020<-nfl_2020%>%
+  mutate(across(c(5:26),~outlier_cap(.)))
+print(nfl_2020)
+
+```
+
+```{r}
+#Exploring the data
+#Creating histogram of different variables
+ggplot(nfl_2020,aes(x=elo1_pre))+
+  geom_histogram(binwidth = 10,fill="blue",color="black",alpha=0.7)+
+  labs(title = "Histogram of elo1_pre",x="Values in elo1_pre",y="Frequency")+
+  theme_minimal()
+
+```
+
+```{r}
+#adding a histogram of score 1 
+ggplot(nfl_2020,aes(x=score1))+
+  geom_histogram(binwidth = 10,fill="green",color="black",alpha=0.7)+
+  labs(title = "Histogram of score1",x="Values in score1",y="Frequency")+
+  theme_minimal()
+#Adding a histogram of score 2
+ggplot(nfl_2020,aes(x=score1))+
+  geom_histogram(binwidth = 10,fill="yellow",color="black",alpha=0.7)+
+  labs(title = "Histogram of score2",x="Values in score2",y="Frequency")+
+  theme_minimal()
+```
+
+```{r}
+#Creating density plot to visualize the density distribution of score1 and score2
+ggplot(nfl_2020,aes(x=score1))+
+  geom_density(fill="blue",alpha=0.6)+
+  labs(title="Density plot of Score1",x="Values in Score1")+
+  theme_minimal()
+ggplot(nfl_2020,aes(x=score2))+
+  geom_density(fill="brown",alpha=0.6)+
+  labs(title="Density plot of Score2",x="Values in Score2")+
+  theme_minimal()
+
+```
+
+
+## Exporting our cleaned data to Excel
+
+```{r}
+#Export the data to excel
+writexl::write_xlsx(nfl_2020,"C:\\Users\\KEVINS\\OneDrive\\Desktop\\TAB\\NFL2020.xlsx")
+
+```
+
+
+
+
+
+
+
